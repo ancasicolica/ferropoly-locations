@@ -6,6 +6,8 @@
 const fs = require('fs');
 const path = require('path');
 const csv = require('csv-parser');
+const { Console } = require('node:console');
+const { Writable } = require('node:stream');
 
 const INPUT_DIR = path.join(__dirname, 'input');
 const OUTPUT_DIR = path.join(__dirname, 'output');
@@ -38,11 +40,24 @@ function getDistanceInMeters(lat1, lon1, lat2, lon2) {
   return R * c;
 }
 
-/** Loads official stations, updates nearby location names, and writes the synchronized JSON file. */
+/** Loads official stations and writes the synchronized JSON file and console report. */
 async function runSync() {
   const officialStations = [];
+  const reportChunks = [];
+  const reportStream = new Writable({
+    write(chunk, encoding, callback) {
+      reportChunks.push(chunk.toString());
+      callback();
+    }
+  });
+  const reportConsole = new Console({ stdout: reportStream, stderr: reportStream });
+  const output = {
+    log: (...args) => { console.log(...args); reportConsole.log(...args); },
+    warn: (...args) => { console.warn(...args); reportConsole.warn(...args); },
+    table: (...args) => { console.table(...args); reportConsole.table(...args); }
+  };
 
-  console.log(`Lese CSV-Datei "${CSV_FILE}" ein...`);
+  output.log(`Lese CSV-Datei "${CSV_FILE}" ein...`);
 
   // 1. Read the CSV file.
   await new Promise((resolve, reject) => {
@@ -71,16 +86,16 @@ async function runSync() {
       .on('error', reject);
   });
 
-  console.log(`${officialStations.length} offizielle Haltestellen erfolgreich in den Speicher geladen.`);
+  output.log(`${officialStations.length} offizielle Haltestellen erfolgreich in den Speicher geladen.`);
 
   // 2. Read the latest JSON file.
   const JSON_FILE = getNewestJsonFile();
-  console.log(`Lese JSON-Datei "${JSON_FILE}" ein...`);
+  output.log(`Lese JSON-Datei "${JSON_FILE}" ein...`);
   const dbRaw = fs.readFileSync(JSON_FILE, 'utf8');
   const db = JSON.parse(dbRaw);
   const changes = [];
 
-  console.log(`Starte räumlichen Abgleich für ${db.locations.length} Ferropoly-Haltestellen...`);
+  output.log(`Starte räumlichen Abgleich für ${db.locations.length} Ferropoly-Haltestellen...`);
 
   // 3. Match each location with its nearest official station.
   for (let loc of db.locations) {
@@ -108,13 +123,13 @@ async function runSync() {
     }
 
     if (attempts > 1) {
-      console.log(`Mehrere Versuche (${attempts}) für "${loc.name}" (${loc.uuid}): Suchradius auf ${searchRadius}m erweitert.`);
+      output.log(`Mehrere Versuche (${attempts}) für "${loc.name}" (${loc.uuid}): Suchradius auf ${searchRadius}m erweitert.`);
     }
 
     const matches = distances.filter(({ distance }) => distance <= searchRadius);
     if (matches.length > 1) {
-      console.log(`Mehrere Treffer im Umkreis von ${searchRadius}m für "${loc.name}" (${loc.uuid}):`);
-      console.table(matches.map(({ station, distance }) => ({
+      output.log(`Mehrere Treffer im Umkreis von ${searchRadius}m für "${loc.name}" (${loc.uuid}):`);
+      output.table(matches.map(({ station, distance }) => ({
         name: station.name,
         distanzMetern: Math.round(distance * 10) / 10,
         ausgewaehlt: station === closestStation
@@ -134,9 +149,9 @@ async function runSync() {
         loc.name = closestStation.name;
       }
     } else if (closestStation) {
-      console.warn(`[WARNUNG] Keine offizielle Haltestelle im Umkreis von ${MAX_SEARCH_DISTANCE_METERS}m für "${loc.name}" gefunden.`);
+      output.warn(`[WARNUNG] Keine offizielle Haltestelle im Umkreis von ${MAX_SEARCH_DISTANCE_METERS}m für "${loc.name}" gefunden.`);
     } else {
-      console.warn(`[WARNUNG] Keine offizielle Haltestelle mit berechenbarer Entfernung für "${loc.name}" gefunden.`);
+      output.warn(`[WARNUNG] Keine offizielle Haltestelle mit berechenbarer Entfernung für "${loc.name}" gefunden.`);
     }
   }
 
@@ -150,15 +165,21 @@ async function runSync() {
   const outputFilename = path.join(OUTPUT_DIR, `locationDb-synced-${dateTime}.json`);
   fs.writeFileSync(outputFilename, JSON.stringify(db, null, 2));
 
-  console.log('\n--- Zusammenfassung der Namensänderungen ---');
+  output.log('\n--- Zusammenfassung der Namensänderungen ---');
   if(changes.length > 0) {
-    console.table(changes);
+    output.table(changes);
   } else {
-    console.log("Keine Namensänderungen notwendig. Alle Haltestellen sind aktuell.");
+    output.log("Keine Namensänderungen notwendig. Alle Haltestellen sind aktuell.");
   }
 
-  console.log(`\nFertig! ${changes.length} Haltestellen wurden aktualisiert.`);
-  console.log(`Neue Datenbank gespeichert unter: ${outputFilename}`);
+  output.log(`\nFertig! ${changes.length} Haltestellen wurden aktualisiert.`);
+  output.log(`Neue Datenbank gespeichert unter: ${outputFilename}`);
+
+  const reportText = reportChunks.join('');
+  let fence = '```';
+  while (reportText.includes(fence)) fence += '`';
+  const reportFilename = path.join(OUTPUT_DIR, `locationDb-synced-${dateTime}.md`);
+  fs.writeFileSync(reportFilename, `# Abgleichsbericht\n\n${fence}text\n${reportText}${fence}\n`);
 }
 
 runSync();
