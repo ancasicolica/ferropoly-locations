@@ -66,6 +66,9 @@ async function runSync() {
       .on('data', (row) => {
         const name = row['designationOfficial'];
         const geoposition = row['Geoposition'];
+        const isoCountryCode = row['isoCountryCode'];
+        const transportOrg = row['businessOrganisationAbbreviationDe'];
+        const height = row['height'] && row['height'].trim() !== '' ? Number(row['height']) : undefined;
 
         // Only process rows with a name and a coordinate string.
         if (name && geoposition) {
@@ -77,7 +80,7 @@ async function runSync() {
             const lng = parseFloat(coords[1].trim());
 
             if (!isNaN(lat) && !isNaN(lng)) {
-              officialStations.push({ name, lat, lng });
+              officialStations.push({ name, lat, lng, isoCountryCode, transportOrg, height });
             }
           }
         }
@@ -99,6 +102,11 @@ async function runSync() {
 
   // 3. Match each location with its nearest official station.
   for (let loc of db.locations) {
+    if (loc.transportOrg === undefined && loc.businessOrganisationAbbreviationDe !== undefined) {
+      loc.transportOrg = loc.businessOrganisationAbbreviationDe;
+    }
+    delete loc.businessOrganisationAbbreviationDe;
+
     const locLat = parseFloat(loc.position.lat);
     const locLng = parseFloat(loc.position.lng);
 
@@ -138,11 +146,21 @@ async function runSync() {
 
     // Update the name when the nearest station is within the expanded matching radius.
     if (closestStation && minDistance <= searchRadius) {
+      if (closestStation.isoCountryCode) {
+        loc.isoCountryCode = closestStation.isoCountryCode;
+      }
+      if (closestStation.transportOrg) {
+        loc.transportOrg = closestStation.transportOrg;
+      }
+      if (Number.isFinite(closestStation.height)) {
+        loc.height = closestStation.height;
+      }
       if (loc.name !== closestStation.name) {
         changes.push({
           uuid: loc.uuid,
           alterName: loc.name,
           neuerName: closestStation.name,
+          isoCountryCode: loc.isoCountryCode,
           distanzMetern: Math.round(minDistance)
         });
 
