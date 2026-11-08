@@ -81,6 +81,21 @@ test('expands the search in 50 m steps until stations are found', async () => {
   assert.equal(result.warnings.length, 0);
 });
 
+test('shows latitude and longitude in separate columns for each matching station', async () => {
+  const result = await syncLocations(
+    [station('Closest', 47.0001), station('Second', 47.0002)],
+    [location('Old name', 47)]
+  );
+
+  assert.equal(result.tables[0].length, 2);
+  assert.equal(result.tables[0][0].lat, 47.0001);
+  assert.equal(result.tables[0][0].lng, 8);
+  assert.equal(result.tables[0][1].lat, 47.0002);
+  assert.equal(result.tables[0][1].lng, 8);
+  assert.match(result.consoleText, /lat/);
+  assert.match(result.consoleText, /lng/);
+});
+
 test('keeps the initial radius when it already contains a station', async () => {
   const result = await syncLocations([station('Nearby', 47.0001)], [location('Old name', 47)]);
 

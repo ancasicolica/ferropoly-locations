@@ -139,6 +139,7 @@ async function runSync() {
       output.log(`Mehrere Treffer im Umkreis von ${searchRadius}m für "${loc.name}" (${loc.uuid}):`);
       output.table(matches.map(({ station, distance }) => ({
         name: station.name,
+        position: `${station.lat}, ${station.lng}`,
         distanzMetern: Math.round(distance * 10) / 10,
         ausgewaehlt: station === closestStation
       })));
