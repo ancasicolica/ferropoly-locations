@@ -132,6 +132,9 @@ async function runSync() {
 
     if (attempts > 1) {
       output.log(`Mehrere Versuche (${attempts}) für "${loc.name}" (${loc.uuid}): Suchradius auf ${searchRadius}m erweitert.`);
+      if (closestStation && minDistance <= searchRadius) {
+        output.log(`Treffer: ${closestStation.name}, Distanz: ${Math.round(minDistance)}m, Position aus CSV: ${closestStation.lat}, ${closestStation.lng}`);
+      }
     }
 
     const matches = distances.filter(({ distance }) => distance <= searchRadius);
