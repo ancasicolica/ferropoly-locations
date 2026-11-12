@@ -23,15 +23,14 @@ function escapeXml(unsafe) {
 
 function generateKml(data) {
   const placemarks = data.locations.map((loc) => {
-    // 1. Name zusammensetzen: isoCountryCode anhängen, falls nicht "CH"
+    // 1. Ortsname zusammensetzen: isoCountryCode anhängen, falls nicht "CH"
     const countrySuffix =
             loc.isoCountryCode && loc.isoCountryCode !== 'CH'
               ? ` (${loc.isoCountryCode})`
               : '';
-    const displayName = escapeXml(`${loc.name}${countrySuffix}`);
 
-    // 2. Aktive Maps (wo Wert === true) als Beschreibung/Kommentar aufbereiten
-    let descriptionXml = '';
+    // 2. Ortsname und aktive Maps als Beschreibung/Kommentar aufbereiten
+    let description = `${loc.name}${countrySuffix}`;
     if (loc.maps) {
       const activeMaps = Object.entries(loc.maps)
         .filter(([_, isActive]) => isActive === true)
@@ -42,8 +41,9 @@ function generateKml(data) {
                 ? `Maps: ${activeMaps.join(', ')}`
                 : 'Maps: keine';
 
-      descriptionXml = `\n      <description>${escapeXml(mapsText)}</description>`;
+      description += `\n${mapsText}`;
     }
+    const descriptionXml = `\n      <description>${escapeXml(description)}</description>`;
 
     // 3. Koordinaten (Wichtig bei KML: Reihenfolge ist Längengrad,Breitengrad[,Höhe]!)
     const lng = loc.position.lng;
@@ -51,7 +51,7 @@ function generateKml(data) {
     const alt = loc.height !== undefined ? `,${loc.height}` : '';
 
     return `    <Placemark>
-      <name>${displayName}</name>${descriptionXml}
+      <name></name>${descriptionXml}
       <Point>
         <coordinates>${lng},${lat}${alt}</coordinates>
       </Point>
